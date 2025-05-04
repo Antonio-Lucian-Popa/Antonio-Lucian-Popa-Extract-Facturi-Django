@@ -32,12 +32,12 @@ def extract_all_indexes(text, fallback_text=None):
             return parse_number(match.group(1)), parse_number(match.group(2))
         return 0, 0
 
-    activ_v, activ_n = extract_index_pair(
-        r"Energie activ[ăa].*?(\d{1,3}(?:\.\d{3})*,\d+)\s+\w+(?:\s+\w+)*\s+(\d{1,3}(?:\.\d{3})*,\d+)")
-    inductiv_v, inductiv_n = extract_index_pair(
-        r"Energie reactiv[ăa] inductiv[ăa].*?(\d{1,3}(?:\.\d{3})*,\d+)\s+\w+(?:\s+\w+)*\s+(\d{1,3}(?:\.\d{3})*,\d+)")
-    capacitiv_v, capacitiv_n = extract_index_pair(
-        r"Energie reactiv[ăa] capacitiv[ăa].*?(\d{1,3}(?:\.\d{3})*,\d+)\s+\w+(?:\s+\w+)*\s+(\d{1,3}(?:\.\d{3})*,\d+)")
+    # Acceptăm "Citire distribuitor" SAU "Estimare convenție" după valorile numerice
+    pattern_common = r"(\d{1,3}(?:\.\d{3})*,\d+)\s+(?:Citire distribuitor|Estimare convenție)\s+(\d{1,3}(?:\.\d{3})*,\d+)\s+(?:Citire distribuitor|Estimare convenție)"
+
+    activ_v, activ_n = extract_index_pair(r"Energie activ[ăa].*?" + pattern_common)
+    inductiv_v, inductiv_n = extract_index_pair(r"Energie reactiv[ăa] inductiv[ăa].*?" + pattern_common)
+    capacitiv_v, capacitiv_n = extract_index_pair(r"Energie reactiv[ăa] capacitiv[ăa].*?" + pattern_common)
 
     return {
         "index_activ_vechi": activ_v,
@@ -53,35 +53,38 @@ def extract_sume_cantitati(text, fallback_text=None):
     if fallback_text is None:
         fallback_text = text
 
-    # Încercăm să izolăm secțiunea „DETALII CITIRI” până la următoarea secțiune
+    # Izolează secțiunea „DETALII CITIRI”
     match_citiri = re.search(r"DETALII CITIRI(.*?)DETALII PRODUSE", fallback_text, re.DOTALL | re.IGNORECASE)
     citiri_text = match_citiri.group(1) if match_citiri else fallback_text
 
     match_total = re.search(r"Total loc de consum.*?([\d.,]+)\s*kWh", fallback_text)
 
-    def suma_cantitati(denumire):
-        # Căutăm linii care conțin tipul de energie și apoi extragem cantitatea numerică
-        pattern = rf"{denumire}.*?(?:\d{{2}}\.\d{{2}}\.\d{{4}})?\s*[\d.,]+\s*Citire.*?[\d.,]+\s*Citire.*?([\d.,]+)"
+    def suma_cantitati(energie_label):
+        pattern = rf"{energie_label}.*?\d{{2}}\.\d{{2}}\.\d{{4}}\s+\d{{2}}\.\d{{2}}\.\d{{4}}\s+([\d.,]+)\s+Citire distribuitor\s+([\d.,]+)\s+Citire distribuitor\s+([\d.,]+)"
         matches = re.findall(pattern, citiri_text, re.IGNORECASE)
         if not matches:
             matches = re.findall(pattern, fallback_text, re.IGNORECASE)
-        return sum(parse_number(v) for v in matches)
+        total = 0
+        for m in matches:
+            try:
+                total += parse_number(m[2])  # Cantitatea e a 3-a valoare (vechi, nou, cantitate)
+            except IndexError:
+                continue
+        return total
 
-    def suma_cantitate_facturata(denumire):
-        # Această parte poate rămâne pe fallback_text (în „DETALII PRODUSE”)
-        pattern = rf"{denumire}.*?(\d+[.,]\d+)\s+kVArh"
+    def suma_cantitate_facturata(energie_label):
+        pattern = rf"{energie_label}.*?(\d+[.,]\d+)\s+kVArh"
         matches = re.findall(pattern, fallback_text, re.IGNORECASE)
         return sum(parse_number(v) for v in matches)
 
     return {
-        "cantitate_activ": suma_cantitati("Energie activ[ăa]"),
-        "cantitate_reactivi": suma_cantitati("Energie reactiv[ăa] inductiv[ăa]"),
-        "cantitate_reactivc": suma_cantitati("Energie reactiv[ăa] capacitiv[ăa]"),
+        "cantitate_activ": suma_cantitati("Energie activă"),
+        "cantitate_reactivi": suma_cantitati("Energie reactivă inductivă"),
+        "cantitate_reactivc": suma_cantitati("Energie reactivă capacitivă"),
         "cantitate_facturata_activ": parse_number(match_total.group(1)) if match_total else 0,
-        "cantitate_facturata_reactivi": suma_cantitate_facturata("Energie reactiv[ăa] inductiv[ăa]"),
-        "cantitate_facturata_reactivc": suma_cantitate_facturata("Energie reactiv[ăa] capacitiv[ăa]")
+        "cantitate_facturata_reactivi": suma_cantitate_facturata("Energie reactivă inductivă"),
+        "cantitate_facturata_reactivc": suma_cantitate_facturata("Energie reactivă capacitivă")
     }
-
 
 
 
@@ -220,7 +223,7 @@ def process_pdfs(folder_path):
 
 
 if __name__ == "__main__":
-    folder = r"C:\\Users\\PopaAntonio\\Desktop\\exported_pdfs"
+    folder = os.path.join(os.path.expanduser("~"), "Desktop", "exported_pdfs")
     output = "rezultate_facturi.xlsx"
     data_rows = process_pdfs(folder)
 
