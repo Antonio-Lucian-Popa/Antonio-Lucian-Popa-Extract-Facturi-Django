@@ -53,39 +53,50 @@ def extract_sume_cantitati(text, fallback_text=None):
     if fallback_text is None:
         fallback_text = text
 
-    # Izolează secțiunea „DETALII CITIRI”
+    print("Local text:", text)
+
+    # Încercăm să izolăm secțiunea „DETALII CITIRI” până la următoarea secțiune
     match_citiri = re.search(r"DETALII CITIRI(.*?)DETALII PRODUSE", fallback_text, re.DOTALL | re.IGNORECASE)
     citiri_text = match_citiri.group(1) if match_citiri else fallback_text
 
     match_total = re.search(r"Total loc de consum.*?([\d.,]+)\s*kWh", fallback_text)
 
-    def suma_cantitati(energie_label):
-        pattern = rf"{energie_label}.*?\d{{2}}\.\d{{2}}\.\d{{4}}\s+\d{{2}}\.\d{{2}}\.\d{{4}}\s+([\d.,]+)\s+Citire distribuitor\s+([\d.,]+)\s+Citire distribuitor\s+([\d.,]+)"
+    def suma_cantitati(denumire):
+        pattern = rf"{denumire}.*?(?:\d{{2}}\.\d{{2}}\.\d{{4}})?\s*[\d.,]+\s*Citire.*?[\d.,]+\s*Citire.*?([\d.,]+)"
         matches = re.findall(pattern, citiri_text, re.IGNORECASE)
         if not matches:
             matches = re.findall(pattern, fallback_text, re.IGNORECASE)
-        total = 0
-        for m in matches:
-            try:
-                total += parse_number(m[2])  # Cantitatea e a 3-a valoare (vechi, nou, cantitate)
-            except IndexError:
-                continue
-        return total
-
-    def suma_cantitate_facturata(energie_label):
-        pattern = rf"{energie_label}.*?(\d+[.,]\d+)\s+kVArh"
-        matches = re.findall(pattern, fallback_text, re.IGNORECASE)
         return sum(parse_number(v) for v in matches)
 
+    def suma_cantitate_facturata(denumire_fix, src=None):
+        if src is None:
+            src = text  # aici folosim blocul brut, nu fallback_text
+        pattern = rf"{denumire_fix}\s+X\d.*?(\d+[.,]\d+)\s*kVArh"
+        matches = re.findall(pattern, src, re.IGNORECASE)
+        if not matches:
+            # fallback dacă nu apare explicit kVArh
+            pattern_alt = rf"{denumire_fix}\s+X\d.*?(\d+[.,]\d+)"
+            matches = re.findall(pattern_alt, src, re.IGNORECASE)
+        return sum(parse_number(v) for v in matches)
+
+    # === nou: căutare energie reactivă X1 și X3 separat pentru capacitiv/inductiv ===
+    def suma_reactivi():
+        return suma_cantitate_facturata("Energie reactiv[ăa] inductiv[ăa] X1")
+
+    def suma_reactivc():
+        return (
+            suma_cantitate_facturata("Energie reactiv[ăa] capacitiv[ăa] X1") +
+            suma_cantitate_facturata("Energie reactiv[ăa] capacitiv[ăa] X3")
+        )
+
     return {
-        "cantitate_activ": suma_cantitati("Energie activă"),
-        "cantitate_reactivi": suma_cantitati("Energie reactivă inductivă"),
-        "cantitate_reactivc": suma_cantitati("Energie reactivă capacitivă"),
+        "cantitate_activ": suma_cantitati("Energie activ[ăa]"),
+        "cantitate_reactivi": suma_cantitati("Energie reactiv[ăa] inductiv[ăa]"),
+        "cantitate_reactivc": suma_cantitati("Energie reactiv[ăa] capacitiv[ăa]"),
         "cantitate_facturata_activ": parse_number(match_total.group(1)) if match_total else 0,
         "cantitate_facturata_reactivi": suma_cantitate_facturata("Energie reactivă inductivă"),
-        "cantitate_facturata_reactivc": suma_cantitate_facturata("Energie reactivă capacitivă")
+        "cantitate_facturata_reactivc": suma_cantitate_facturata("Energie reactivă capacitivă"),
     }
-
 
 
 def extract_data_from_text(text, global_text=None):
