@@ -59,7 +59,8 @@ def extract_sume_cantitati(text, fallback_text=None):
 
 
 
-    match_total = re.search(r"Total loc de consum.*?([\d.,]+)\s*kWh", fallback_text)
+    match_total = re.search(r"Total loc de consum.*?([\-−–]?\d{1,3}(?:[.,]\d{3})*[.,]?\d+)\s*kWh", fallback_text)
+
 
     def suma_cantitati(denumire):
         pattern = rf"{denumire}.*?(?:\d{{2}}\.\d{{2}}\.\d{{4}})?\s*[\d.,]+\s*Citire.*?[\d.,]+\s*Citire.*?([\d.,]+)"
@@ -78,7 +79,7 @@ def extract_sume_cantitati(text, fallback_text=None):
 
         # Construim un regex robust care caută: <denumire> <X1|X3> <dată> <dată> <valoare> kVArh
         denumire_fix_escaped = re.sub(r"\s+", r"\\s+", denumire_fix)
-        pattern = rf"{denumire_fix_escaped}\s+{x_type}.*?(-?\d+[.,]?\d*)\s*kVArh"
+        pattern = rf"{denumire_fix_escaped}\s+{x_type}.*?(?:\d{{2}}\.\d{{2}}\.\d{{2,4}})?\s*-\s*(?:\d{{2}}\.\d{{2}}\.\d{{2,4}})?\s+([\-−–]?\d+(?:[.,]?\d*)?)\s*kVArh"
         matches = re.findall(pattern, src, re.IGNORECASE)
 
         print(f"[DEBUG] {denumire_fix} {x_type} → {matches}")
