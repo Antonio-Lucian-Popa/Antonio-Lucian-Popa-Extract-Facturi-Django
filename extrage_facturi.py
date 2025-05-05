@@ -53,11 +53,11 @@ def extract_sume_cantitati(text, fallback_text=None):
     if fallback_text is None:
         fallback_text = text
 
-    print("Local text:", text)
-
     # Încercăm să izolăm secțiunea „DETALII CITIRI” până la următoarea secțiune
     match_citiri = re.search(r"DETALII CITIRI(.*?)DETALII PRODUSE", fallback_text, re.DOTALL | re.IGNORECASE)
     citiri_text = match_citiri.group(1) if match_citiri else fallback_text
+
+
 
     match_total = re.search(r"Total loc de consum.*?([\d.,]+)\s*kWh", fallback_text)
 
@@ -68,15 +68,20 @@ def extract_sume_cantitati(text, fallback_text=None):
             matches = re.findall(pattern, fallback_text, re.IGNORECASE)
         return sum(parse_number(v) for v in matches)
 
-    def suma_cantitate_facturata(denumire_fix, src=None):
+    def suma_cantitate_facturata(denumire_fix, x_type="X1", src=None):
         if src is None:
-            src = text  # aici folosim blocul brut, nu fallback_text
-        pattern = rf"{denumire_fix}\s+X\d.*?(\d+[.,]\d+)\s*kVArh"
+            src = text  # fallback
+
+        # Normalizează
+        src = src.replace('\n', ' ').replace('\xa0', ' ').replace('\r', ' ')
+        src = re.sub(r'\s+', ' ', src)
+
+        # Construim un regex robust care caută: <denumire> <X1|X3> <dată> <dată> <valoare> kVArh
+        denumire_fix_escaped = re.sub(r"\s+", r"\\s+", denumire_fix)
+        pattern = rf"{denumire_fix_escaped}\s+{x_type}.*?(-?\d+[.,]?\d*)\s*kVArh"
         matches = re.findall(pattern, src, re.IGNORECASE)
-        if not matches:
-            # fallback dacă nu apare explicit kVArh
-            pattern_alt = rf"{denumire_fix}\s+X\d.*?(\d+[.,]\d+)"
-            matches = re.findall(pattern_alt, src, re.IGNORECASE)
+
+        print(f"[DEBUG] {denumire_fix} {x_type} → {matches}")
         return sum(parse_number(v) for v in matches)
 
     # === nou: căutare energie reactivă X1 și X3 separat pentru capacitiv/inductiv ===
@@ -94,8 +99,16 @@ def extract_sume_cantitati(text, fallback_text=None):
         "cantitate_reactivi": suma_cantitati("Energie reactiv[ăa] inductiv[ăa]"),
         "cantitate_reactivc": suma_cantitati("Energie reactiv[ăa] capacitiv[ăa]"),
         "cantitate_facturata_activ": parse_number(match_total.group(1)) if match_total else 0,
-        "cantitate_facturata_reactivi": suma_cantitate_facturata("Energie reactivă inductivă"),
-        "cantitate_facturata_reactivc": suma_cantitate_facturata("Energie reactivă capacitivă"),
+        "cantitate_facturata_reactivi": (
+            suma_cantitate_facturata("Energie reactivă inductivă", "X1", text) +
+            suma_cantitate_facturata("Energie reactivă inductivă", "X3", text)
+        ),
+        "cantitate_facturata_reactivc": (
+            suma_cantitate_facturata("Energie reactivă capacitivă", "X1", text) +
+            suma_cantitate_facturata("Energie reactivă capacitivă", "X3", text)
+        ),
+
+
     }
 
 
