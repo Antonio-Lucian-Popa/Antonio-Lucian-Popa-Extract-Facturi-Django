@@ -55,9 +55,8 @@ def extract_sume_cantitati(text, fallback_text=None):
 
     # Încercăm să izolăm secțiunea „DETALII CITIRI” până la următoarea secțiune
     match_citiri = re.search(r"DETALII CITIRI(.*?)DETALII PRODUSE", fallback_text, re.DOTALL | re.IGNORECASE)
-    citiri_text = match_citiri.group(1) if match_citiri else fallback_text
-
-
+    citiri_text = " ".join(match.group(1) for match in re.finditer(
+        r"DETALII CITIRI(.*?)(?=DETALII CITIRI|DETALII PRODUSE|TOTAL|$)", fallback_text, re.DOTALL | re.IGNORECASE))
 
     match_total = re.search(r"Total loc de consum.*?([\-−–]?\d{1,3}(?:[.,]\d{3})*[.,]?\d+)\s*kWh", fallback_text)
 
