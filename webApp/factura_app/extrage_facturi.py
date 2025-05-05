@@ -206,7 +206,7 @@ def split_pdf_by_blocuri(text):
 
 
 
-def process_pdfs(folder_path):
+def process_pdfs(folder_path, output_excel_path):
     rows = []
     for filename in os.listdir(folder_path):
         if not filename.lower().endswith(".pdf"):
@@ -246,40 +246,17 @@ def process_pdfs(folder_path):
     return rows
 
 
-if __name__ == "__main__":
-    folder = os.path.join(os.path.expanduser("~"), "Desktop", "exported_pdfs")
-    output = "rezultate_facturi.xlsx"
-    data_rows = process_pdfs(folder)
-
-
+def finalize_excel(data_rows, output_excel_path):
     df = pd.DataFrame(data_rows)
 
-    # Definește MultiIndex pentru coloane
     multi_columns = pd.MultiIndex.from_tuples([
-        ("", "loc consum"),
-        ("", "PERIOADA CONSUM"),
-        ("", ""),
-        ("", "POD"),
-        ("", "factura"),
-        ("", "pret"),
-        ("", "valoare_fara_TVA"),
-        ("", "valoare_cu_TVA"),
-        ("", "total_plata"),
-        ("", "sold_anterior"),
-        ("index vechi", "activ"),
-        ("index vechi", "reactiv I"),
-        ("index vechi", "reactiv C"),
-        ("index nou", "activ"),
-        ("index nou", "reactiv I"),
-        ("index nou", "reactiv C"),
-        ("cantitate citita", "activ"),
-        ("cantitate citita", "reactiv I"),
-        ("cantitate citita", "reactiv C"),
-        ("cantitate facturata", "activ"),
-        ("cantitate facturata", "reactiv I"),
-        ("cantitate facturata", "reactiv C"),
-        ("", "fisier"),
-        ("", "alerta")
+        ("", "loc consum"), ("", "PERIOADA CONSUM"), ("", ""), ("", "POD"), ("", "factura"),
+        ("", "pret"), ("", "valoare_fara_TVA"), ("", "valoare_cu_TVA"), ("", "total_plata"),
+        ("", "sold_anterior"), ("index vechi", "activ"), ("index vechi", "reactiv I"), ("index vechi", "reactiv C"),
+        ("index nou", "activ"), ("index nou", "reactiv I"), ("index nou", "reactiv C"),
+        ("cantitate citita", "activ"), ("cantitate citita", "reactiv I"), ("cantitate citita", "reactiv C"),
+        ("cantitate facturata", "activ"), ("cantitate facturata", "reactiv I"), ("cantitate facturata", "reactiv C"),
+        ("", "fisier"), ("", "alerta")
     ])
 
     df_reordered = pd.DataFrame([
@@ -307,35 +284,30 @@ if __name__ == "__main__":
             row.get("cantitate_facturata_reactivi", 0),
             row.get("cantitate_facturata_reactivc", 0),
             row.get("fisier", ""),
-            "⚠️ Diferență mare la reactiv C" if abs(row.get("cantitate_reactivc", 0) - row.get("cantitate_facturata_reactivc", 0)) > 100 else ""
+            "⚠️ Diferență mare la reactiv C" if abs(
+                row.get("cantitate_reactivc", 0) - row.get("cantitate_facturata_reactivc", 0)) > 100 else ""
         ] for row in data_rows
     ], columns=multi_columns)
 
-    # Workbook
     wb = Workbook()
     ws = wb.active
     ws.title = "Facturi"
-    ws.freeze_panes = "A3"  # 👉 îngheață primele 2 rânduri (header și subheader)
+    ws.freeze_panes = "A3"
 
-    # Scriem rândurile
     for r in dataframe_to_rows(df_reordered, index=False, header=True):
         ws.append(r)
 
-    # Font, alinieri, border
     bold_center = Font(bold=True)
     center = Alignment(horizontal="center", vertical="center")
-    thin_border = Border(left=Side(style='thin'), right=Side(style='thin'),
-                         top=Side(style='thin'), bottom=Side(style='thin'))
+    thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'),
+                         bottom=Side(style='thin'))
 
-    # Aplică stil pe header + subheader
     for row in ws.iter_rows(min_row=1, max_row=2):
         for cell in row:
             cell.font = bold_center
             cell.alignment = center
             cell.border = thin_border
 
-
-    # 👉 Îmbinare celule pentru „index vechi”, „index nou”, „cantitate citita”, „cantitate facturata”
     merge_groups = {
         "index vechi": (11, 13),
         "index nou": (14, 16),
@@ -348,38 +320,33 @@ if __name__ == "__main__":
         for col in range(start_col, end_col + 1):
             ws.cell(row=2, column=col).value = multi_columns[col - 1][1]
 
-    # Colorare fundaluri
-    fill_citita = PatternFill(start_color="DDEBF7", end_color="DDEBF7", fill_type="solid")  # albastru
-    fill_facturata = PatternFill(start_color="FCE4D6", end_color="FCE4D6", fill_type="solid")  # portocaliu
-    fill_facturata_c = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")  # galben
-    fill_index_vechi = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")  # verde deschis
-    fill_index_nou = PatternFill(start_color="E4DFEC", end_color="E4DFEC", fill_type="solid")  # mov lavandă
+    fill_colors = {
+        "index_vechi": PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"),
+        "index_nou": PatternFill(start_color="E4DFEC", end_color="E4DFEC", fill_type="solid"),
+        "cantitate_citita": PatternFill(start_color="DDEBF7", end_color="DDEBF7", fill_type="solid"),
+        "cantitate_facturata": PatternFill(start_color="FCE4D6", end_color="FCE4D6", fill_type="solid"),
+        "cantitate_facturata_c": PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+    }
 
     for row in ws.iter_rows(min_row=1, max_row=ws.max_row):
         for cell in row:
             if isinstance(cell, MergedCell):
-                continue  # skip celulele îmbinate
-
+                continue
             cell.border = thin_border
-
-            col = cell.column  # sau cell.col_idx în unele versiuni, dar aici merge .column
-
-            # Evidențiere pentru coloana „alerta” (coloana 24)
+            col = cell.column
             if col == 24 and cell.value:
-                cell.fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")  # roșu deschis
-
-            if col in [11, 12, 13]:  # index vechi
-                cell.fill = fill_index_vechi
-            elif col in [14, 15, 16]:  # index nou
-                cell.fill = fill_index_nou
-            elif col in [17, 18, 19]:  # cantitate citita
-                cell.fill = fill_citita
+                cell.fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+            elif col in [11, 12, 13]:
+                cell.fill = fill_colors["index_vechi"]
+            elif col in [14, 15, 16]:
+                cell.fill = fill_colors["index_nou"]
+            elif col in [17, 18, 19]:
+                cell.fill = fill_colors["cantitate_citita"]
             elif col == 20:
-                cell.fill = fill_facturata
+                cell.fill = fill_colors["cantitate_facturata"]
             elif col in [21, 22]:
-                cell.fill = fill_facturata_c
+                cell.fill = fill_colors["cantitate_facturata_c"]
 
-    # Auto-size
     for col in ws.columns:
         max_length = 0
         col_letter = None
@@ -391,5 +358,4 @@ if __name__ == "__main__":
         if col_letter:
             ws.column_dimensions[col_letter].width = max_length + 2
 
-    wb.save(output)
-    print(f"[💾] Gata! Fișier salvat: {output}")
+    wb.save(output_excel_path)
