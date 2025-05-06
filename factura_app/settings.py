@@ -26,7 +26,7 @@ SECRET_KEY = 'django-insecure-4#o&ne%3&#_8vwtp0fzd)r*h5xcf4)9c$lwjg$c@h_!3d@rbl_
 DEBUG = True
 
 ALLOWED_HOSTS = [
-    'antonio-lucian-popa-extract-facturi-062s.onrender.com'
+    '*'
 ]
 
 
